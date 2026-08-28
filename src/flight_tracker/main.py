@@ -17,7 +17,7 @@ def index(request: Request):
     return templates.TemplateResponse(
         request=request,
         name="index.html",
-        context={"greeting": "Hello: Flight Tracker — deployed!"},
+        context={"greeting": "Hello: Flight Tracker — auto!"},
     )
 
 
