@@ -1,10 +1,24 @@
-<!DOCTYPE html>
+﻿<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="utf-8">
   <title>Flight Tracker</title>
+  <style>
+    body { font-family: system-ui, sans-serif; margin: 3rem auto; max-width: 34rem; padding: 0 1rem; }
+    .config { font-size: 3rem; font-weight: 700; margin: 0.5rem 0; }
+    .raw { color: #666; font-family: ui-monospace, monospace; font-size: 0.8rem; }
+  </style>
 </head>
 <body>
-  <h1>{{ greeting }}</h1>
+  <h1>Dublin runway configuration</h1>
+
+  {% if error %}
+    <p>{{ error }}</p>
+  {% else %}
+    <p>Wind: {{ wind }}</p>
+    <p class="config">{{ config }}</p>
+    <p>{{ summary }}</p>
+    <p class="raw">{{ raw }}</p>
+  {% endif %}
 </body>
 </html>
