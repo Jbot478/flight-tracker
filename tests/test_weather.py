@@ -1,4 +1,5 @@
-﻿from flight_tracker.weather import parse_metar
+﻿from flight_tracker import weather
+from flight_tracker.weather import parse_metar
 
 # Real observations from Dublin, saved so these tests never hit the network.
 SOUTHWESTERLY = (
@@ -30,3 +31,38 @@ def test_trailing_nosig_group_does_not_break_parsing():
     observation = parse_metar(STRONG_WESTERLY)
     assert observation.wind_dir == 270
     assert observation.wind_speed == 18
+
+
+def _counting_fetch(counter):
+    def fetch():
+        counter.append(1)
+        return STRONG_WESTERLY
+
+    return fetch
+
+
+def test_repeat_calls_reuse_the_cached_observation(monkeypatch):
+    weather._clear_cache()
+    calls = []
+    monkeypatch.setattr(weather, "fetch_raw_metar", _counting_fetch(calls))
+
+    first = weather.get_observation()
+    second = weather.get_observation()
+
+    assert len(calls) == 1
+    assert first == second
+
+
+def test_cache_expires_after_five_minutes(monkeypatch):
+    weather._clear_cache()
+    calls = []
+    monkeypatch.setattr(weather, "fetch_raw_metar", _counting_fetch(calls))
+
+    clock = [1000.0]
+    monkeypatch.setattr(weather, "_now", lambda: clock[0])
+
+    weather.get_observation()
+    clock[0] += weather.CACHE_SECONDS + 1
+    weather.get_observation()
+
+    assert len(calls) == 2

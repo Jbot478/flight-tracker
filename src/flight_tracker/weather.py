@@ -1,5 +1,6 @@
 ﻿"""Fetch and parse the current METAR observation for Dublin Airport (EIDW)."""
 
+import time
 from dataclasses import dataclass
 
 import httpx
@@ -8,6 +9,10 @@ from metar import Metar
 METAR_URL = "https://aviationweather.gov/api/data/metar"
 STATION = "EIDW"
 REQUEST_TIMEOUT_SECONDS = 10
+
+# METARs are only reissued every 30 minutes, so re-fetching more often than
+# this tells us nothing new and just loads someone else's free service.
+CACHE_SECONDS = 300
 
 # Trailing forecast groups that European METARs carry but the parser doesn't read.
 TREND_MARKERS = (" TEMPO ", " BECMG ", " NOSIG")
@@ -20,6 +25,22 @@ class Observation:
     raw: str
     wind_dir: int | None
     wind_speed: int | None
+
+
+# The most recent observation and when we got it, or None if we have neither.
+_cached: tuple[float, Observation] | None = None
+
+
+def _now() -> float:
+    """Seconds from an arbitrary start point. A separate function so tests
+    can fake the passage of time without actually waiting."""
+    return time.monotonic()
+
+
+def _clear_cache() -> None:
+    """Forget the cached observation. Used by tests."""
+    global _cached
+    _cached = None
 
 
 def _strip_trend_groups(raw: str) -> str:
@@ -55,5 +76,13 @@ def parse_metar(raw: str) -> Observation:
 
 
 def get_observation() -> Observation:
-    """Fetch and parse in one call. This is what the web page uses."""
-    return parse_metar(fetch_raw_metar())
+    """The current observation, re-fetched at most once every CACHE_SECONDS."""
+    global _cached
+
+    now = _now()
+    if _cached is not None and now - _cached[0] < CACHE_SECONDS:
+        return _cached[1]
+
+    observation = parse_metar(fetch_raw_metar())
+    _cached = (now, observation)
+    return observation
