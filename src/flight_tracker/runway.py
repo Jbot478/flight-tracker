@@ -3,9 +3,6 @@
 import math
 
 # Dublin's runways and the compass heading each one points along.
-# 10L/28R and 10R/28L are the parallel main pair; 16/34 is the crosswind runway.
-# Order matters: on an exact tie (a 220 degree wind is equally close to 160
-# and 280) the first match wins, and the main runway is the realistic answer.
 RUNWAY_HEADINGS = {
     "28": 280,
     "10": 100,
@@ -13,8 +10,21 @@ RUNWAY_HEADINGS = {
     "16": 160,
 }
 
+# 10L/28R and 10R/28L are the parallel pair, and Dublin strongly prefers them:
+# twice the capacity, and the taxiways and procedures are built around them.
+# 16/34 is the crosswind runway, used only when the wind makes the parallels
+# genuinely unsuitable. Order matters within each pair - on an exact tie the
+# first wins, and westerly operations are Dublin's usual case.
+MAIN_PAIR = ("28", "10")
+CROSSWIND_PAIR = ("34", "16")
+
 # Below this, the wind isn't strong enough to determine the runway in use.
 MIN_DECISIVE_WIND_KT = 5
+
+# Roughly what large jets accept across a dry runway. Beyond it the crosswind
+# runway becomes the sensible option. A starting figure, to be tuned against
+# real traffic rather than trusted.
+MAX_CROSSWIND_KT = 25
 
 # A changeover stops departures and turns every aircraft around, so the new
 # runway has to be meaningfully better - not just marginally nearer the wind.
@@ -45,11 +55,42 @@ def headwind(wind_dir: int, wind_speed: int, runway: str) -> float:
     return wind_speed * math.cos(math.radians(offset))
 
 
+def crosswind(wind_dir: int, wind_speed: int, runway: str) -> float:
+    """Knots of wind blowing across the runway rather than along it."""
+    offset = _angular_difference(RUNWAY_HEADINGS[runway], wind_dir)
+    return abs(wind_speed * math.sin(math.radians(offset)))
+
+
+def _best_of(pair: tuple[str, ...], wind_dir: int, wind_speed: int) -> str:
+    """Whichever end of a runway gives a headwind rather than a tailwind."""
+    return max(pair, key=lambda runway: headwind(wind_dir, wind_speed, runway))
+
+
 def infer_config(wind_dir: int | None, wind_speed: int | None) -> str:
     """Return the runway most likely in use: "28", "10", "34", "16" or "uncertain".
 
+    Dublin prefers the parallel pair and only uses the crosswind runway when
+    the crosswind on the parallels becomes unmanageable.
+
     wind_dir is the direction the wind is coming FROM, in degrees.
     Pass None for a variable-direction wind.
+    """
+    if wind_dir is None or wind_speed is None:
+        return "uncertain"
+    if wind_speed < MIN_DECISIVE_WIND_KT:
+        return "uncertain"
+
+    main = _best_of(MAIN_PAIR, wind_dir, wind_speed)
+    if crosswind(wind_dir, wind_speed, main) <= MAX_CROSSWIND_KT:
+        return main
+    return _best_of(CROSSWIND_PAIR, wind_dir, wind_speed)
+
+
+def infer_config_nearest(wind_dir: int | None, wind_speed: int | None) -> str:
+    """The original rule: whichever runway heading is nearest the wind.
+
+    Kept for comparison. It treats all four runways as equal candidates, which
+    sends Dublin to the crosswind runway far more often than really happens.
     """
     if wind_dir is None or wind_speed is None:
         return "uncertain"

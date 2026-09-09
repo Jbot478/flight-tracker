@@ -70,44 +70,47 @@ def test_timeline_covers_twenty_four_hours():
     assert timeline[0].time == NOW_DUBLIN
 
 
-def test_raw_timeline_follows_the_wind_round_the_compass():
-    # Without smoothing, the config tracks the nearest runway heading exactly.
+def test_raw_timeline_holds_the_main_pair_through_light_shifts():
+    # 210 at 7 kt no longer sends Dublin to the crosswind runway: it stays
+    # on 28. Only the overnight southerly turns the airport round, to 10.
     forecast = parse_taf(DUBLIN_TAF, now=NOW_DUBLIN)
     timeline = build_timeline(forecast, now=NOW_DUBLIN, hysteresis=False)
 
-    assert timeline[0].config == "28"    # 12:00, westerly
-    assert timeline[7].config == "16"    # 19:00, backed to 210 at 7 kt
-    assert timeline[-1].config == "28"   # 11:00 next day, back to 220
+    assert timeline[7].config == "28"     # 19:00, backed to 210 at 7 kt
+    assert timeline[14].config == "28"    # 02:00, still westerly enough
+    assert timeline[15].config == "10"    # 03:00, 160 at 8 kt
+    assert timeline[-1].config == "28"    # 11:00, back to 220
 
 
-def test_hysteresis_holds_28_through_the_light_evening_shift():
-    # The same 19:00 hour, smoothed: 210 at 7 kt is not worth a changeover.
+def test_hysteresis_delays_the_overnight_changeover():
+    # The raw rule switches the moment the wind does; the airport takes an
+    # hour to be convinced.
     forecast = parse_taf(DUBLIN_TAF, now=NOW_DUBLIN)
     timeline = build_timeline(forecast, now=NOW_DUBLIN)
 
-    assert timeline[7].config == "28"
+    assert timeline[15].config == "28"    # 03:00, case still building
+    assert timeline[16].config == "10"    # 04:00, switched
 
 
-def test_hysteresis_still_switches_for_the_overnight_southerly():
-    # 160 at 8 kt from 03:00 is a genuine shift, adopted after the lag.
+def test_hysteresis_also_delays_the_switch_back():
     forecast = parse_taf(DUBLIN_TAF, now=NOW_DUBLIN)
     timeline = build_timeline(forecast, now=NOW_DUBLIN)
 
-    assert timeline[15].config == "28"   # 03:00, case still building
-    assert timeline[16].config == "16"   # 04:00, switched
+    assert timeline[21].config == "10"    # 09:00, wind has veered but we hold
+    assert timeline[22].config == "28"    # 10:00, switched back
 
 
 def test_raw_messy_taf_swings_east_in_the_morning():
     forecast = parse_taf(MESSY_TAF, now=NOW_MESSY)
     timeline = build_timeline(forecast, now=NOW_MESSY, hysteresis=False)
 
-    assert timeline[0].config == "28"    # 12:00, 250 degrees
-    assert timeline[18].config == "10"   # 06:00 next day, 090 degrees
+    assert timeline[0].config == "28"     # 12:00, 250 degrees
+    assert timeline[18].config == "10"    # 06:00 next day, 090 degrees
 
 
 def test_smoothed_messy_taf_lags_the_morning_swing_by_an_hour():
     forecast = parse_taf(MESSY_TAF, now=NOW_MESSY)
     timeline = build_timeline(forecast, now=NOW_MESSY)
 
-    assert timeline[18].config == "28"   # 06:00, case building
-    assert timeline[19].config == "10"   # 07:00, switched
+    assert timeline[18].config == "28"    # 06:00, case building
+    assert timeline[19].config == "10"    # 07:00, switched
