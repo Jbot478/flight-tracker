@@ -1,4 +1,4 @@
-# Python-generated files
+﻿# Python-generated files
 __pycache__/
 *.py[oc]
 build/
@@ -14,4 +14,7 @@ wheels/
 .env.local
 
 # Editor
-.vscode/analysis/data/
+.vscode/
+
+# Part B data: re-downloadable, no need to version it
+analysis/data/
