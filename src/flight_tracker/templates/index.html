@@ -4,9 +4,23 @@
   <meta charset="utf-8">
   <title>Flight Tracker</title>
   <style>
-    body { font-family: system-ui, sans-serif; margin: 3rem auto; max-width: 34rem; padding: 0 1rem; }
+    body { font-family: system-ui, sans-serif; margin: 3rem auto; max-width: 46rem; padding: 0 1rem; }
     .config { font-size: 3rem; font-weight: 700; margin: 0.5rem 0; }
     .raw { color: #666; font-family: ui-monospace, monospace; font-size: 0.8rem; }
+    h2 { font-size: 1rem; margin-top: 2.5rem; }
+    .timeline { display: flex; gap: 2px; margin: 0.75rem 0; }
+    .slot { flex: 1 1 0; min-width: 0; text-align: center; padding: 0.5rem 0;
+            border-radius: 3px; font-size: 0.7rem; line-height: 1.5; }
+    .slot .cfg { display: block; font-weight: 700; }
+    .slot .hh { display: block; color: #00000099; }
+    .busy { background: #cdebd0; }
+    .quiet { background: #e4e4e4; }
+    .crosswind { background: #cfe0f5; }
+    .unknown { background: #f7e3ae; }
+    .legend { list-style: none; padding: 0; display: flex; flex-wrap: wrap;
+              gap: 1rem; font-size: 0.8rem; color: #444; }
+    .key { display: inline-block; width: 0.8rem; height: 0.8rem;
+           border-radius: 2px; vertical-align: -1px; margin-right: 0.2rem; }
   </style>
 </head>
 <body>
@@ -19,6 +33,27 @@
     <p class="config">{{ config }}</p>
     <p>{{ summary }}</p>
     <p class="raw">{{ raw }}</p>
+  {% endif %}
+
+  <h2>Next 24 hours (times UTC)</h2>
+
+  {% if timeline %}
+    <div class="timeline">
+      {% for hour in timeline %}
+        <div class="slot {{ hour.css }}" title="{{ hour.detail }}">
+          <span class="cfg">{{ hour.short }}</span>
+          <span class="hh">{{ hour.label }}</span>
+        </div>
+      {% endfor %}
+    </div>
+    <ul class="legend">
+      <li><span class="key busy"></span>28 - departures west, overhead</li>
+      <li><span class="key quiet"></span>10 / 16 - departures away</li>
+      <li><span class="key crosswind"></span>34 - crosswind runway</li>
+      <li><span class="key unknown"></span>uncertain</li>
+    </ul>
+  {% else %}
+    <p class="raw">Forecast unavailable.</p>
   {% endif %}
 </body>
 </html>

@@ -1,4 +1,4 @@
-﻿"""Fetch and parse the current METAR observation for Dublin Airport (EIDW)."""
+﻿"""Fetch Dublin's current observation (METAR) and forecast (TAF)."""
 
 import time
 from dataclasses import dataclass
@@ -6,13 +6,14 @@ from dataclasses import dataclass
 import httpx
 from metar import Metar
 
-METAR_URL = "https://aviationweather.gov/api/data/metar"
+BASE_URL = "https://aviationweather.gov/api/data"
 STATION = "EIDW"
 REQUEST_TIMEOUT_SECONDS = 10
 
-# METARs are only reissued every 30 minutes, so re-fetching more often than
-# this tells us nothing new and just loads someone else's free service.
+# METARs are reissued every 30 minutes, TAFs every 6 hours, so re-fetching
+# more often than this tells us nothing new and just loads a free service.
 CACHE_SECONDS = 300
+TAF_CACHE_SECONDS = 1800
 
 # Trailing forecast groups that European METARs carry but the parser doesn't read.
 TREND_MARKERS = (" TEMPO ", " BECMG ", " NOSIG")
@@ -27,20 +28,41 @@ class Observation:
     wind_speed: int | None
 
 
-# The most recent observation and when we got it, or None if we have neither.
-_cached: tuple[float, Observation] | None = None
-
-
 def _now() -> float:
     """Seconds from an arbitrary start point. A separate function so tests
     can fake the passage of time without actually waiting."""
     return time.monotonic()
 
 
+class _TimedCache:
+    """Remembers one value for a fixed number of seconds."""
+
+    def __init__(self, seconds: int) -> None:
+        self.seconds = seconds
+        self._value = None
+        self._stored_at = 0.0
+
+    def get(self, produce):
+        """Return the remembered value, or call `produce` and remember that."""
+        moment = _now()
+        if self._value is not None and moment - self._stored_at < self.seconds:
+            return self._value
+        self._value = produce()
+        self._stored_at = moment
+        return self._value
+
+    def clear(self) -> None:
+        self._value = None
+
+
+_metar_cache = _TimedCache(CACHE_SECONDS)
+_taf_cache = _TimedCache(TAF_CACHE_SECONDS)
+
+
 def _clear_cache() -> None:
-    """Forget the cached observation. Used by tests."""
-    global _cached
-    _cached = None
+    """Forget everything cached. Used by tests."""
+    _metar_cache.clear()
+    _taf_cache.clear()
 
 
 def _strip_trend_groups(raw: str) -> str:
@@ -52,15 +74,24 @@ def _strip_trend_groups(raw: str) -> str:
     return raw.strip()
 
 
-def fetch_raw_metar() -> str:
-    """Ask aviationweather.gov for Dublin's latest observation, as plain text."""
+def _fetch(kind: str) -> str:
     response = httpx.get(
-        METAR_URL,
+        f"{BASE_URL}/{kind}",
         params={"ids": STATION, "format": "raw"},
         timeout=REQUEST_TIMEOUT_SECONDS,
     )
     response.raise_for_status()
     return response.text.strip()
+
+
+def fetch_raw_metar() -> str:
+    """Dublin's latest observation, as plain text."""
+    return _fetch("metar")
+
+
+def fetch_raw_taf() -> str:
+    """Dublin's latest forecast, as plain text."""
+    return _fetch("taf")
 
 
 def parse_metar(raw: str) -> Observation:
@@ -77,12 +108,9 @@ def parse_metar(raw: str) -> Observation:
 
 def get_observation() -> Observation:
     """The current observation, re-fetched at most once every CACHE_SECONDS."""
-    global _cached
+    return _metar_cache.get(lambda: parse_metar(fetch_raw_metar()))
 
-    now = _now()
-    if _cached is not None and now - _cached[0] < CACHE_SECONDS:
-        return _cached[1]
 
-    observation = parse_metar(fetch_raw_metar())
-    _cached = (now, observation)
-    return observation
+def get_raw_taf() -> str:
+    """The current forecast text, re-fetched at most twice an hour."""
+    return _taf_cache.get(fetch_raw_taf)

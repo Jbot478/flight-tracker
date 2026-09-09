@@ -1,10 +1,10 @@
 ﻿"""Turn Dublin's TAF forecast into an hour-by-hour runway configuration."""
 
 import re
-from dataclasses import dataclass
+from dataclasses import dataclass, replace
 from datetime import datetime, timedelta, timezone
 
-from flight_tracker.runway import infer_config
+from flight_tracker.runway import apply_hysteresis, infer_config
 
 # "0912/1012" - day and hour twice: valid from day 09 12:00Z to day 10 12:00Z.
 VALIDITY_RE = re.compile(r"\b(\d{2})(\d{2})/(\d{2})(\d{2})\b")
@@ -161,8 +161,14 @@ def build_timeline(
     forecast: Forecast,
     now: datetime | None = None,
     hours: int = 24,
+    hysteresis: bool = True,
 ) -> list[ForecastHour]:
-    """One row per hour from now to the end of the forecast, capped at `hours`."""
+    """One row per hour from now to the end of the forecast, capped at `hours`.
+
+    With `hysteresis` on (the default) the configurations are smoothed so the
+    airport does not appear to swap direction for a marginal wind shift. Turn
+    it off to see what the raw wind alone implies.
+    """
     now = now or datetime.now(timezone.utc)
     start = max(forecast.valid_from, now.replace(minute=0, second=0, microsecond=0))
     end = min(forecast.valid_to, start + timedelta(hours=hours))
@@ -180,4 +186,9 @@ def build_timeline(
             )
         )
         moment += timedelta(hours=1)
-    return rows
+
+    if not hysteresis:
+        return rows
+
+    smoothed = apply_hysteresis([(row.wind_dir, row.wind_speed) for row in rows])
+    return [replace(row, config=config) for row, config in zip(rows, smoothed)]
